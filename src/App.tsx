@@ -311,13 +311,13 @@ const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('dashboard');
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
       setSession(session);
       if (session) fetchRole(session.user.id);
       else setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
       setSession(session);
       if (session) fetchRole(session.user.id);
       else setLoading(false);
@@ -1457,7 +1457,7 @@ const MediaView = () => {
   const load = async () => {
     const { data } = await supabase.storage.from("portfolio-images").list("", { limit: 100, sortBy: { column: "created_at", order: "desc" } });
     if(data) {
-      const mapped = data.filter(f => f.name !== '.emptyFolderPlaceholder').map(f => ({
+      const mapped = data.filter((f: any) => f.name !== '.emptyFolderPlaceholder').map((f: any) => ({
         name: f.name,
         url: supabase.storage.from("portfolio-images").getPublicUrl(f.name).data.publicUrl
       }));
@@ -1514,7 +1514,7 @@ const SettingsView = () => {
   const [deploying, setDeploying] = useState(false);
 
   useEffect(() => {
-    supabase.from("site_settings").select("*").eq("id", 1).single().then(({data}) => {
+    supabase.from("site_settings").select("*").eq("id", 1).single().then(({data}: { data: any }) => {
        if(data) setData(data);
     });
   }, []);
