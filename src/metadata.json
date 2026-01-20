@@ -1,0 +1,5 @@
+{
+  "name": "UX Vision CMS",
+  "description": "A modern, glassmorphism-styled Content Management System for managing blog posts, portfolio items, and site settings using Supabase.",
+  "requestFramePermissions": []
+}
