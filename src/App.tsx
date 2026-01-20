@@ -722,6 +722,15 @@ const DashboardView = () => {
      </div>
   );
 
+  // CORREÇÃO: Uso da variável loading para evitar o erro TS6133
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64 w-full">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* HEADER DE BOAS VINDAS */}
