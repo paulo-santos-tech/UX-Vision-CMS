@@ -3,7 +3,6 @@ import { supabase } from './supabaseClient';
 import type { PortfolioItem, BlogPost, BlogCategory, SiteSettings, ViewState, MicrosaasItem } from './types';
 
 // IMPORTAÇÃO DO LOGO (Garante que funcione em Produção e Dev)
-// Certifique-se que o arquivo está em: src/assets/logo.svg
 import logoImg from './assets/logo.svg';
 
 // ============================================================================
@@ -394,7 +393,6 @@ const LoginScreen = () => {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-dark-glass backdrop-blur-xl border border-dark-border rounded-2xl p-8 shadow-2xl">
         <div className="flex justify-center mb-8">
-          {/* LOGO USANDO A VARIÁVEL IMPORTADA */}
           <img src={logoImg} alt="UX Vision" className="h-14 w-auto object-contain opacity-90" />
         </div>
         <h2 className="text-2xl font-bold text-center mb-6">CMS Login</h2>
@@ -442,7 +440,6 @@ const LoginScreen = () => {
 const Header = ({ email, role, onLogout }: { email: string; role: string; onLogout: () => void }) => (
   <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/10 px-6 py-4 rounded-b-2xl mb-6 flex justify-between items-center">
     <div className="flex items-center gap-3">
-      {/* LOGO USANDO A VARIÁVEL IMPORTADA */}
       <img src={logoImg} alt="UX Vision" className="h-8 w-auto object-contain" />
       <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 rounded-full">
         {role}
