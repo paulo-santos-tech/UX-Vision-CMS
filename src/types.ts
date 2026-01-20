@@ -1,3 +1,4 @@
+
 // Define a estrutura de um item do Portfólio
 export interface PortfolioItem {
   id: number;
@@ -55,6 +56,14 @@ export interface BlogPost {
     tg: boolean;
     tw: boolean;
   };
+}
+
+// Define a estrutura para itens de verificação de SEO
+export interface SeoCheckItem {
+  id: string;
+  label: string;
+  status: 'good' | 'warning' | 'bad';
+  message: string;
 }
 
 // Define a estrutura de uma Categoria
