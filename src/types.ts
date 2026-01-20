@@ -84,6 +84,15 @@ export interface SiteSettings {
   body_scripts: string;
 }
 
+// Dados de Analytics
+export interface PageView {
+  id: number;
+  created_at: string;
+  path: string;
+  referrer: string | null;
+  user_agent: string | null;
+}
+
 // Define os papéis de usuário
 export interface UserRole {
   user_id: string;

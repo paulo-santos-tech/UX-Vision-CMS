@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from './supabaseClient';
-import type { PortfolioItem, BlogPost, BlogCategory, SiteSettings, ViewState, MicrosaasItem } from './types';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { supabase, supabaseUrl, supabaseKey } from './supabaseClient';
+// CORREÇÃO CRÍTICA: Uso de 'import type' para corrigir o erro do TypeScript (isolatedModules)
+import type { PortfolioItem, BlogPost, BlogCategory, SiteSettings, ViewState, MicrosaasItem, PageView } from './types';
 
 // IMPORTAÇÃO DO LOGO (Garante que funcione em Produção e Dev)
 import logoImg from './assets/logo.svg';
@@ -8,6 +9,82 @@ import logoImg from './assets/logo.svg';
 // ============================================================================
 // 1. COMPONENTES DE UI REUTILIZÁVEIS
 // ============================================================================
+
+/**
+ * COMPONENTE DE GRÁFICO SIMPLES (SVG)
+ * Exibe a tendência de visitas nos últimos dias
+ */
+const TrafficChart = ({ data }: { data: { date: string; count: number }[] }) => {
+  if (!data || data.length === 0) return <div className="h-40 flex items-center justify-center text-white/30 text-xs">Sem dados suficientes</div>;
+
+  const height = 150;
+  const maxVal = Math.max(...data.map(d => d.count), 1); // Evita divisão por zero
+  
+  // Pontos para a linha SVG
+  const points = data.map((d, i) => {
+    const x = (i / (data.length - 1)) * 1000; // Mapeia para 0-1000 de largura
+    const y = height - (d.count / maxVal) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  // Pontos para a área preenchida (fecha o loop embaixo)
+  const fillPoints = `0,${height} ${points} 1000,${height}`;
+
+  return (
+    <div className="w-full h-[180px] relative mt-4 group">
+      <svg viewBox="0 0 1000 150" className="w-full h-full overflow-visible" preserveAspectRatio="none">
+        {/* Gradiente */}
+        <defs>
+          <linearGradient id="gradient" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#00e2ff" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#00e2ff" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        
+        {/* Linhas de grade horizontais */}
+        <line x1="0" y1="0" x2="1000" y2="0" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="5,5" />
+        <line x1="0" y1="75" x2="1000" y2="75" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="5,5" />
+        <line x1="0" y1="150" x2="1000" y2="150" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+
+        {/* Área Preenchida */}
+        <polygon points={fillPoints} fill="url(#gradient)" />
+        
+        {/* Linha Principal */}
+        <polyline 
+          points={points} 
+          fill="none" 
+          stroke="#00e2ff" 
+          strokeWidth="3" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+          className="drop-shadow-[0_0_10px_rgba(0,226,255,0.5)]"
+        />
+
+        {/* Círculos nos pontos (visíveis no hover ou para todos se poucos dados) */}
+        {data.map((d, i) => {
+           const x = (i / (data.length - 1)) * 1000;
+           const y = height - (d.count / maxVal) * height;
+           return (
+             <g key={i} className="group/point">
+               <circle cx={x} cy={y} r="4" fill="#fff" className="opacity-0 group-hover/point:opacity-100 transition-opacity" />
+               {/* Tooltip simples via title nativo por enquanto */}
+               <rect x={x - 25} y={y - 30} width="50" height="20" rx="4" fill="rgba(0,0,0,0.8)" className="opacity-0 group-hover/point:opacity-100" />
+               <text x={x} y={y - 16} textAnchor="middle" fill="white" fontSize="10" className="opacity-0 group-hover/point:opacity-100 pointer-events-none">
+                 {d.count}
+               </text>
+             </g>
+           )
+        })}
+      </svg>
+      {/* Eixo X (Datas) */}
+      <div className="flex justify-between text-[10px] text-white/40 mt-2 font-mono">
+         <span>{data[0]?.date}</span>
+         <span>{data[Math.floor(data.length/2)]?.date}</span>
+         <span>{data[data.length-1]?.date}</span>
+      </div>
+    </div>
+  );
+};
 
 /**
  * SEO GAUGE CHART (Estilo Yoast)
@@ -497,50 +574,242 @@ const Navigation = ({ currentView, setView, role }: { currentView: ViewState; se
 // --- DASHBOARD VIEW ---
 const DashboardView = () => {
   const [stats, setStats] = useState({ visits: 0, projects: 0, posts: 0 });
+  const [analyticsData, setAnalyticsData] = useState<PageView[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadStats = async () => {
+      setLoading(true);
       try {
         const { count: proj } = await supabase.from("portfolio").select("*", { count: "exact", head: true });
         const { count: post } = await supabase.from("blog_posts").select("*", { count: "exact", head: true });
         
+        // Pega dados dos últimos 30 dias para o gráfico
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
         let visits = 0;
+        let pageViews: PageView[] = [];
+
         try {
-          const start = new Date();
-          start.setDate(1);
-          start.setHours(0, 0, 0, 0);
-          const { count } = await supabase.from("page_analytics").select("*", { count: "exact", head: true }).gte("created_at", start.toISOString());
-          visits = count || 0;
+          const { data, count, error } = await supabase
+            .from("page_analytics")
+            .select("*") // Precisamos dos dados, não apenas count
+            .gte("created_at", thirtyDaysAgo.toISOString())
+            .order("created_at", { ascending: true });
+            
+          if (!error && data) {
+            visits = count || data.length;
+            pageViews = data;
+          }
         } catch { /* Ignora se a tabela não existir */ }
 
         setStats({ visits, projects: proj || 0, posts: post || 0 });
+        setAnalyticsData(pageViews);
       } catch (e) {
         console.error(e);
+      } finally {
+        setLoading(false);
       }
     };
     loadStats();
   }, []);
 
-  const StatCard = ({ icon, title, value, colorClass }: any) => (
-    <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 flex items-center gap-5 backdrop-blur-md">
-      <i className={`${icon} text-3xl ${colorClass}`}></i>
-      <div>
-        <h3 className="text-sm text-white/60 mb-1">{title}</h3>
+  // Processamento de Dados para o Dashboard
+  const { chartData, topPages, topReferrers, topCampaigns } = useMemo(() => {
+    // 1. Chart Data (Visitas por Dia)
+    const dailyCounts: Record<string, number> = {};
+    const today = new Date();
+    // Preenche com 0 os ultimos 30 dias
+    for(let i=29; i>=0; i--) {
+       const d = new Date();
+       d.setDate(today.getDate() - i);
+       const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+       dailyCounts[dateStr] = 0;
+    }
+
+    analyticsData.forEach(view => {
+       const dateStr = new Date(view.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+       if(dailyCounts[dateStr] !== undefined) dailyCounts[dateStr]++;
+    });
+
+    const chartData = Object.entries(dailyCounts).map(([date, count]) => ({ date, count }));
+
+    // 2. Top Pages
+    const pages: Record<string, number> = {};
+    const referrers: Record<string, number> = {};
+    const campaigns: Record<string, number> = {};
+
+    analyticsData.forEach(view => {
+       // Pages
+       const path = view.path || '/';
+       pages[path] = (pages[path] || 0) + 1;
+
+       // Referrers (Tenta limpar a URL)
+       let ref = 'Direto / Desconhecido';
+       if(view.referrer) {
+         try {
+           const url = new URL(view.referrer);
+           ref = url.hostname.replace('www.', '');
+           if(ref.includes('google')) ref = 'Google (Orgânico)';
+           if(ref.includes('instagram')) ref = 'Instagram';
+           if(ref.includes('facebook')) ref = 'Facebook';
+           if(ref.includes('linkedin')) ref = 'LinkedIn';
+           if(ref.includes('t.co')) ref = 'Twitter / X';
+         } catch { ref = view.referrer; }
+       }
+       referrers[ref] = (referrers[ref] || 0) + 1;
+
+       // Campaigns (Extrair UTM)
+       try {
+         // Assume que 'path' pode conter query strings se gravado corretamente, ou o parametro esta solto
+         // No DB atual, path costuma ser só o caminho. Se quisermos UTM, precisaríamos salvar a URL completa ou query params.
+         // Vou tentar extrair do 'path' caso ele tenha sido salvo com query string.
+         if(view.path && view.path.includes('utm_')) {
+            const urlParams = new URLSearchParams(view.path.split('?')[1]);
+            const source = urlParams.get('utm_source');
+            const campaign = urlParams.get('utm_campaign');
+            const term = urlParams.get('utm_term'); // A "Palavra-chave" do marketing pago
+            
+            if(source || campaign) {
+               const label = `${source || '??'} / ${campaign || '??'} ${term ? `(${term})` : ''}`;
+               campaigns[label] = (campaigns[label] || 0) + 1;
+            }
+         }
+       } catch {}
+    });
+
+    // Ordenar e pegar Top 5
+    const topPages = Object.entries(pages).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    const topReferrers = Object.entries(referrers).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    const topCampaigns = Object.entries(campaigns).sort((a,b) => b[1] - a[1]).slice(0, 5);
+
+    return { chartData, topPages, topReferrers, topCampaigns };
+  }, [analyticsData]);
+
+  const StatCard = ({ icon, title, value, colorClass, subtext }: any) => (
+    <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 flex items-center gap-5 backdrop-blur-md relative overflow-hidden group">
+      <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-10 group-hover:scale-110 transition-transform duration-500 ${colorClass.replace('text-', 'bg-')}`}></div>
+      <i className={`${icon} text-3xl ${colorClass} relative z-10`}></i>
+      <div className="relative z-10">
+        <h3 className="text-sm text-white/60 mb-1 font-semibold uppercase tracking-wide">{title}</h3>
         <p className="text-3xl font-black text-white">{value}</p>
+        {subtext && <p className="text-[10px] text-white/40 mt-1">{subtext}</p>}
       </div>
     </div>
   );
 
+  const ListCard = ({ title, items, icon, color }: any) => (
+     <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md flex flex-col h-full">
+        <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2 uppercase tracking-wide">
+          <i className={`${icon} ${color}`}></i> {title}
+        </h3>
+        <div className="space-y-3 flex-grow">
+           {items.length === 0 ? (
+             <p className="text-white/20 text-xs italic">Sem dados registrados.</p>
+           ) : items.map(([label, count]: any, i: number) => (
+             <div key={i} className="relative">
+                <div className="flex justify-between text-xs mb-1 relative z-10">
+                   <span className="font-medium text-white/80 truncate max-w-[80%]">{label}</span>
+                   <span className="text-white/50">{count}</span>
+                </div>
+                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                   <div className={`h-full ${color.replace('text-', 'bg-')}`} style={{ width: `${(count / Math.max(...items.map((x:any) => x[1]))) * 100}%` }}></div>
+                </div>
+             </div>
+           ))}
+        </div>
+     </div>
+  );
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="bg-gradient-to-r from-neon-purple/20 to-neon-cyan/10 border border-white/10 p-8 rounded-2xl backdrop-blur-md">
-        <h3 className="text-2xl font-bold mb-2">Bem-vindo ao CMS</h3>
-        <p className="text-white/70">Selecione uma ferramenta no menu acima para começar.</p>
+      {/* HEADER DE BOAS VINDAS */}
+      <div className="bg-gradient-to-r from-neon-purple/20 to-neon-cyan/10 border border-white/10 p-8 rounded-2xl backdrop-blur-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h3 className="text-2xl font-bold mb-1">Analytics em Tempo Real</h3>
+          <p className="text-white/60 text-sm">Resumo dos últimos 30 dias de performance.</p>
+        </div>
+        <div className="flex gap-2">
+           <span className="px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold flex items-center gap-2">
+             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Sistema Ativo
+           </span>
+        </div>
       </div>
+
+      {/* CARDS DE ESTATÍSTICAS RÁPIDAS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard icon="fa-solid fa-eye" title="Visitas (Mês)" value={stats.visits} colorClass="text-neon-cyan" />
-        <StatCard icon="fa-solid fa-layer-group" title="Projetos" value={stats.projects} colorClass="text-neon-purple" />
-        <StatCard icon="fa-solid fa-file-lines" title="Artigos" value={stats.posts} colorClass="text-blue-400" />
+        <StatCard 
+           icon="fa-solid fa-users" 
+           title="Visitas Totais" 
+           value={stats.visits} 
+           colorClass="text-neon-cyan" 
+           subtext="Acessos únicos (IP/Sessão)"
+        />
+        <StatCard 
+           icon="fa-solid fa-layer-group" 
+           title="Projetos Ativos" 
+           value={stats.projects} 
+           colorClass="text-neon-purple" 
+        />
+        <StatCard 
+           icon="fa-solid fa-file-lines" 
+           title="Conteúdos" 
+           value={stats.posts} 
+           colorClass="text-blue-400" 
+           subtext="Artigos publicados no blog"
+        />
+      </div>
+
+      {/* GRÁFICO PRINCIPAL */}
+      <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
+         <div className="flex justify-between items-center mb-2">
+            <h3 className="text-lg font-bold">Tráfego do Site</h3>
+            <select className="bg-black/40 border border-white/10 rounded-lg text-xs text-white/70 px-2 py-1 outline-none">
+              <option>Últimos 30 dias</option>
+            </select>
+         </div>
+         <TrafficChart data={chartData} />
+      </div>
+
+      {/* GRID DE DETALHES (TOP PAGES, ORIGEM, CAMPANHAS) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+         {/* PÁGINAS MAIS ACESSADAS */}
+         <ListCard 
+            title="Páginas Populares" 
+            items={topPages} 
+            icon="fa-solid fa-copy" 
+            color="text-neon-purple" 
+         />
+         
+         {/* ORIGEM DO TRÁFEGO */}
+         <ListCard 
+            title="Origem (Referrer)" 
+            items={topReferrers} 
+            icon="fa-solid fa-globe" 
+            color="text-neon-cyan" 
+         />
+         
+         {/* CAMPANHAS DE MARKETING (UTM) */}
+         <ListCard 
+            title="Campanhas & Keywords" 
+            items={topCampaigns} 
+            icon="fa-solid fa-bullhorn" 
+            color="text-green-400" 
+         />
+      </div>
+
+      {/* NOTA SOBRE GOOGLE KEYWORDS */}
+      <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+         <i className="fa-solid fa-circle-info text-blue-400 mt-0.5"></i>
+         <div>
+            <h4 className="text-sm font-bold text-blue-300">Sobre Palavras-Chave do Google</h4>
+            <p className="text-xs text-white/60 mt-1 leading-relaxed">
+               Por questões de privacidade e criptografia (SSL), o Google não compartilha a palavra-chave exata que o usuário digitou para encontrar seu site organicamente. 
+               Para rastrear termos de campanhas pagas (Ads), use links com <code>?utm_term=palavra-chave</code>. 
+               Para SEO orgânico, consulte o <strong>Google Search Console</strong>.
+            </p>
+         </div>
       </div>
     </div>
   );
@@ -1551,6 +1820,31 @@ const SettingsView = () => {
     setDeploying(false);
   };
 
+  const trackerSnippet = `
+// INSTALAÇÃO DO RASTREADOR DE ANALYTICS
+// Cole este código no arquivo principal do seu site (Ex: App.js, layout.tsx ou index.html dentro de uma tag <script>)
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  '${supabaseUrl}', 
+  '${supabaseKey}'
+);
+
+const trackView = async () => {
+  try {
+    await supabase.from('page_analytics').insert([{
+      path: window.location.pathname + window.location.search,
+      referrer: document.referrer,
+      user_agent: navigator.userAgent
+    }]);
+  } catch (e) { console.error('Analytics Error', e); }
+};
+
+// Executar ao carregar a página
+trackView();
+`;
+
   return (
     <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
        <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
@@ -1578,6 +1872,25 @@ const SettingsView = () => {
        </div>
 
        <div className="space-y-6">
+         
+         {/* NOVO: INSTALAÇÃO DO RASTREADOR */}
+         <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
+            <h3 className="font-bold text-lg mb-4 text-neon-cyan"><i className="fa-solid fa-code mr-2"></i> Instalação do Rastreador</h3>
+            <p className="text-xs text-white/60 mb-3">
+               Para que o Dashboard de Analytics funcione, você precisa instalar este código no seu site público (Frontend). Ele envia os dados de visita para o Supabase.
+            </p>
+            <div className="bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-[10px] text-white/70 overflow-x-auto relative group">
+               <pre>{trackerSnippet.trim()}</pre>
+               <button 
+                 type="button"
+                 onClick={() => { navigator.clipboard.writeText(trackerSnippet); alert('Código copiado!'); }}
+                 className="absolute top-2 right-2 bg-white/10 hover:bg-neon-purple text-white p-2 rounded opacity-0 group-hover:opacity-100 transition-all"
+               >
+                 <i className="fa-solid fa-copy"></i>
+               </button>
+            </div>
+         </div>
+
          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
               <i className="fa-solid fa-server text-6xl text-white"></i>
