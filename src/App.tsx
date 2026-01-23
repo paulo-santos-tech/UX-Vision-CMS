@@ -553,7 +553,7 @@ const BlogView = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [formData, setFormData] = useState<Partial<BlogPost>>({ status: 'draft', social_shares: { wa: true, fb: false, li: true, tg: false, tw: false } });
+  const [formData, setFormData] = useState<Partial<BlogPost>>({ status: 'draft', social_shares: { wa: true, fb: false, li: true, tg: false, tw: false }, tags: [] });
   
   const [seoScore, setSeoScore] = useState(0);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
@@ -561,6 +561,9 @@ const BlogView = () => {
   const [seoChecks, setSeoChecks] = useState<{id:string, label:string, status:string, message:string}[]>([]);
   const [previewMode, setPreviewMode] = useState<'mobile' | 'desktop'>('mobile');
   const [showCatManager, setShowCatManager] = useState(false);
+  
+  // Novo State para o Input de Tags
+  const [tagInput, setTagInput] = useState("");
 
   const loadData = useCallback(async () => {
     const { data: p } = await supabase.from("blog_posts").select("*").order("created_at", { ascending: false });
@@ -603,13 +606,16 @@ const BlogView = () => {
   }, [formData, isEditing]);
 
   const handleEdit = (post: BlogPost) => { setFormData(post); setEditingId(post.id); setIsEditing(true); };
-  const handleCreate = () => { setFormData({ status: 'draft' }); setEditingId(null); setIsEditing(true); };
+  const handleCreate = () => { setFormData({ status: 'draft', tags: [] }); setEditingId(null); setIsEditing(true); };
   const handleDelete = async (id: number) => { if(confirm('Excluir?')) { await supabase.from('blog_posts').delete().eq('id', id); loadData(); } };
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title) return alert("Título obrigatório");
+    
+    // Normalização de Slug caso não tenha sido preenchido
     const slug = formData.slug || formData.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
-    const payload = { ...formData, slug };
+    
+    const payload = { ...formData, slug, tags: formData.tags || [] };
     const { error } = editingId ? await supabase.from("blog_posts").update(payload).eq("id", editingId) : await supabase.from("blog_posts").insert([payload]);
     if (error) alert(error.message); else { setIsEditing(false); loadData(); }
   };
@@ -628,6 +634,25 @@ const BlogView = () => {
        setNewCatName(''); 
        loadData(); 
     } 
+  };
+
+  // Funções de Gerenciamento de Tags
+  const handleAddTag = () => {
+     if(!tagInput.trim()) return;
+     const currentTags = formData.tags || [];
+     if(!currentTags.includes(tagInput.trim())) {
+        setFormData({...formData, tags: [...currentTags, tagInput.trim()]});
+     }
+     setTagInput("");
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+     setFormData({...formData, tags: (formData.tags || []).filter(t => t !== tagToRemove)});
+  };
+
+  // Normalização de Slug (Minúsculo, sem espaços e caracteres especiais)
+  const normalizeSlug = (val: string) => {
+     return val.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
   };
 
   if(!isEditing) return (
@@ -708,7 +733,21 @@ const BlogView = () => {
              <form onSubmit={handleSave} className="space-y-4">
                 <InputGroup label="Título"><StyledInput value={formData.title||''} onChange={(e) => setFormData({...formData, title: e.target.value})} /></InputGroup>
                 
-                {/* CAMPO DE RESUMO (EXCERPT) ADICIONADO */}
+                {/* CAMPO SLUG (URL) - ADICIONADO */}
+                <InputGroup label="Slug (URL Amigável)">
+                   <div className="relative">
+                      <StyledInput 
+                         value={formData.slug||''} 
+                         onChange={(e) => setFormData({...formData, slug: e.target.value})} 
+                         onBlur={(e) => setFormData({...formData, slug: normalizeSlug(e.target.value)})}
+                         placeholder="ex: meu-artigo-incrivel"
+                         className="pl-20"
+                      />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-xs select-none">/blog/</span>
+                   </div>
+                </InputGroup>
+
+                {/* CAMPO DE RESUMO (EXCERPT) */}
                 <InputGroup label="Resumo (Excerpt)">
                    <StyledTextArea 
                      value={formData.excerpt || ''} 
@@ -718,17 +757,70 @@ const BlogView = () => {
                    />
                 </InputGroup>
 
-                <div className="grid grid-cols-2 gap-4">
-                   <InputGroup label="Categoria">
-                      <StyledSelect value={formData.category||''} onChange={(e) => setFormData({...formData, category: e.target.value})}>
-                         <option value="">Selecione...</option>
-                         {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                      </StyledSelect>
-                   </InputGroup>
-                   <InputGroup label="Status"><StyledSelect value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as any})}><option value="draft">Rascunho</option><option value="published">Publicado</option></StyledSelect></InputGroup>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                   <div className="md:col-span-1">
+                      <InputGroup label="Categoria">
+                          <StyledSelect value={formData.category||''} onChange={(e) => setFormData({...formData, category: e.target.value})}>
+                             <option value="">Selecione...</option>
+                             {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                          </StyledSelect>
+                      </InputGroup>
+                   </div>
+                   <div className="md:col-span-1">
+                      <InputGroup label="Status"><StyledSelect value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as any})}><option value="draft">Rascunho</option><option value="published">Publicado</option></StyledSelect></InputGroup>
+                   </div>
+                   <div className="md:col-span-1">
+                      <InputGroup label="Tempo de Leitura">
+                          <StyledInput 
+                            value={formData.read_time||''} 
+                            onChange={(e) => setFormData({...formData, read_time: e.target.value})}
+                            placeholder="ex: 5 min"
+                          />
+                      </InputGroup>
+                   </div>
                 </div>
                 
-                <InputGroup label="Conteúdo"><NeonEditor value={formData.content||''} onChange={c => setFormData({...formData, content: c})} /></InputGroup>
+                {/* CAMPO DE TAGS (ILIMITADO) */}
+                <InputGroup label="Tags">
+                   <div className="flex gap-2 mb-2">
+                      <StyledInput 
+                        value={tagInput} 
+                        onChange={e => setTagInput(e.target.value)} 
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                        placeholder="Adicionar tag e pressione Enter..." 
+                      />
+                      <Button onClick={handleAddTag} variant="secondary"><i className="fa-solid fa-plus"></i></Button>
+                   </div>
+                   <div className="flex flex-wrap gap-2">
+                      {(formData.tags || []).map((tag, i) => (
+                         <span key={i} className="bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan px-3 py-1 rounded-full text-xs flex items-center gap-2">
+                            {tag}
+                            <i className="fa-solid fa-xmark cursor-pointer hover:text-white" onClick={() => handleRemoveTag(tag)}></i>
+                         </span>
+                      ))}
+                      {(formData.tags || []).length === 0 && <span className="text-white/30 text-xs italic">Nenhuma tag adicionada.</span>}
+                   </div>
+                </InputGroup>
+
+                <InputGroup label="Conteúdo">
+                    <NeonEditor 
+                      value={formData.content||''} 
+                      onChange={c => {
+                          // Auto cálculo do tempo de leitura ao digitar
+                          const text = c.replace(/<[^>]*>?/gm, '');
+                          const words = text.split(/\s+/).filter(x => x).length;
+                          const mins = Math.ceil(words / 200);
+                          const autoTime = `${mins} min`;
+                          
+                          setFormData(prev => ({
+                             ...prev, 
+                             content: c,
+                             // Só preenche automaticamente se o campo estiver vazio para não sobrescrever edição manual do usuário
+                             read_time: prev.read_time ? prev.read_time : autoTime
+                          }));
+                      }} 
+                    />
+                </InputGroup>
                 
                 {/* INPUT PADRONIZADO PARA CAPA DO BLOG */}
                 <InputGroup label="Imagem de Capa">
@@ -755,8 +847,9 @@ const BlogView = () => {
              <div className="mt-6 space-y-4 border-t border-white/10 pt-4">
                 <InputGroup label="Meta Title">
                   <div className="relative">
-                     <StyledInput value={formData.meta_title||''} onChange={(e) => setFormData({...formData, meta_title: e.target.value})} maxLength={60} />
-                     <span className="absolute right-3 top-3 text-[10px] text-white/40">{formData.meta_title?.length||0}/60</span>
+                     {/* Limite aumentado para 100 caracteres conforme solicitado */}
+                     <StyledInput value={formData.meta_title||''} onChange={(e) => setFormData({...formData, meta_title: e.target.value})} maxLength={100} />
+                     <span className="absolute right-3 top-3 text-[10px] text-white/40">{formData.meta_title?.length||0}/100</span>
                   </div>
                 </InputGroup>
                 <InputGroup label="Meta Description">
@@ -1145,6 +1238,15 @@ const MediaView = () => {
     await supabase.storage.from("portfolio-images").upload(`${Date.now()}_${file.name}`, file);
     load();
   };
+  const handleDeleteImage = async (imageName: string) => {
+    if(!confirm('Tem certeza que deseja apagar esta imagem permanentemente?')) return;
+    const { error } = await supabase.storage.from('portfolio-images').remove([imageName]);
+    if (error) {
+      alert("Erro ao excluir imagem: " + error.message);
+    } else {
+      load();
+    }
+  };
   return (
     <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md animate-fade-in">
        <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold">Galeria</h3><label className="cursor-pointer bg-white/10 px-4 py-2 rounded hover:bg-white/20 text-sm">Upload<input type="file" hidden onChange={handleUpload} /></label></div>
@@ -1152,8 +1254,10 @@ const MediaView = () => {
           {images.map(img => (
              <div key={img.name} className="aspect-square bg-black/40 rounded-lg overflow-hidden relative group">
                 <img src={img.url} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
                    <button onClick={() => { navigator.clipboard.writeText(img.url); alert('URL copiada'); }} className="text-white hover:text-neon-cyan"><i className="fa-solid fa-link"></i></button>
+                   {/* Botão de Excluir Mídia */}
+                   <button onClick={() => handleDeleteImage(img.name)} className="text-white hover:text-red-500" title="Excluir"><i className="fa-solid fa-trash"></i></button>
                 </div>
              </div>
           ))}

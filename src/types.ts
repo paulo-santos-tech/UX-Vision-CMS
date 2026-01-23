@@ -1,4 +1,3 @@
-
 // Define a estrutura de um item do Portfólio
 export interface PortfolioItem {
   id: number;
@@ -44,6 +43,7 @@ export interface BlogPost {
   image: string;
   author?: string; // Nome do autor
   read_time?: string; // Tempo de leitura (ex: "5 min")
+  tags?: string[]; // Tags do post
   meta_title: string;
   meta_description: string;
   keyword: string;
@@ -56,14 +56,6 @@ export interface BlogPost {
     tg: boolean;
     tw: boolean;
   };
-}
-
-// Define a estrutura para itens de verificação de SEO
-export interface SeoCheckItem {
-  id: string;
-  label: string;
-  status: 'good' | 'warning' | 'bad';
-  message: string;
 }
 
 // Define a estrutura de uma Categoria
