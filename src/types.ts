@@ -8,14 +8,22 @@ export interface PortfolioItem {
   description: string; // Descrição curta
   
   // Novos Campos
+  slug?: string; // URL Amigável
   full_description?: string; // HTML Rico
-  challenge?: string;
-  solution?: string;
+  challenge?: string; // Agora HTML Rico
+  solution?: string; // Agora HTML Rico
   client?: string;
   year?: string;
   link?: string;
   technologies?: string[]; // Array de strings (ex: ["React", "Node"])
   gallery?: string[]; // Array de URLs de imagens
+}
+
+// Define a estrutura de uma Categoria do Portfolio
+export interface PortfolioCategory {
+  id: number;
+  created_at: string;
+  name: string;
 }
 
 // Define a estrutura de um produto Microsaas

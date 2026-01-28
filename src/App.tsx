@@ -1,14 +1,25 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase, supabaseUrl, supabaseKey } from './supabaseClient';
 // CORREÇÃO CRÍTICA: Uso de 'import type' para corrigir o erro do TypeScript (isolatedModules)
-import type { PortfolioItem, BlogPost, BlogCategory, SiteSettings, ViewState, MicrosaasItem, PageView } from './types';
+import type { PortfolioItem, BlogPost, BlogCategory, SiteSettings, ViewState, MicrosaasItem, PageView, PortfolioCategory } from './types';
 
 // IMPORTAÇÃO DO LOGO (Garante que funcione em Produção e Dev)
 import logoImg from './assets/logo.svg';
 
 // ============================================================================
-// 1. COMPONENTES DE UI REUTILIZÁVEIS
+// 1. COMPONENTES DE UI REUTILIZÁVEIS E UTILS
 // ============================================================================
+
+/**
+ * Função utilitária para normalizar Slugs (URLs amigáveis)
+ */
+const normalizeSlug = (val: string) => {
+  return val.toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+    .replace(/\s+/g, '-') // Espaços para hífens
+    .replace(/[^\w-]+/g, ''); // Remove caracteres especiais
+};
 
 /**
  * COMPONENTE DE GRÁFICO SIMPLES (SVG)
@@ -613,7 +624,7 @@ const BlogView = () => {
     if (!formData.title) return alert("Título obrigatório");
     
     // Normalização de Slug caso não tenha sido preenchido
-    const slug = formData.slug || formData.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+    const slug = formData.slug || normalizeSlug(formData.title);
     
     const payload = { ...formData, slug, tags: formData.tags || [] };
     const { error } = editingId ? await supabase.from("blog_posts").update(payload).eq("id", editingId) : await supabase.from("blog_posts").insert([payload]);
@@ -648,11 +659,6 @@ const BlogView = () => {
 
   const handleRemoveTag = (tagToRemove: string) => {
      setFormData({...formData, tags: (formData.tags || []).filter(t => t !== tagToRemove)});
-  };
-
-  // Normalização de Slug (Minúsculo, sem espaços e caracteres especiais)
-  const normalizeSlug = (val: string) => {
-     return val.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
   };
 
   if(!isEditing) return (
@@ -733,7 +739,7 @@ const BlogView = () => {
              <form onSubmit={handleSave} className="space-y-4">
                 <InputGroup label="Título"><StyledInput value={formData.title||''} onChange={(e) => setFormData({...formData, title: e.target.value})} /></InputGroup>
                 
-                {/* CAMPO SLUG (URL) - ADICIONADO */}
+                {/* CAMPO SLUG (URL) */}
                 <InputGroup label="Slug (URL Amigável)">
                    <div className="relative">
                       <StyledInput 
@@ -914,92 +920,6 @@ const BlogView = () => {
   );
 };
 
-// --- MICROSAAS VIEW ---
-const MicrosaasView = () => {
-  const [items, setItems] = useState<MicrosaasItem[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<Partial<MicrosaasItem>>({});
-  const [featureInput, setFeatureInput] = useState("");
-
-  const load = useCallback(async () => { const { data } = await supabase.from("microsaas").select("*").order("created_at", { ascending: false }); if(data) setItems(data); }, []);
-  useEffect(() => { load(); }, [load]);
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const payload = { ...formData, features: formData.features || [] };
-    const { error } = formData.id ? await supabase.from("microsaas").update(payload).eq("id", formData.id) : await supabase.from("microsaas").insert([payload]);
-    if(error) alert(error.message); else { setIsEditing(false); load(); }
-  };
-
-  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.[0]) return;
-    const file = e.target.files[0];
-    const name = `ms_${Date.now()}_${file.name}`;
-    await supabase.storage.from("portfolio-images").upload(name, file);
-    const { data } = supabase.storage.from("portfolio-images").getPublicUrl(name);
-    setFormData({...formData, image: data.publicUrl});
-  };
-
-  if(isEditing) return (
-    <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md animate-fade-in">
-       <h3 className="text-xl font-bold mb-4">{formData.id ? 'Editar' : 'Novo'} Microsaas</h3>
-       <form onSubmit={handleSave} className="space-y-4">
-          <InputGroup label="Nome"><StyledInput value={formData.name||''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></InputGroup>
-          <div className="grid grid-cols-2 gap-4">
-             <InputGroup label="Preço"><StyledInput value={formData.price||''} onChange={(e) => setFormData({...formData, price: e.target.value})} /></InputGroup>
-             <InputGroup label="Status"><StyledSelect value={formData.status||'Venda'} onChange={(e) => setFormData({...formData, status: e.target.value as any})}><option>Venda</option><option>Uso</option><option>Beta</option></StyledSelect></InputGroup>
-          </div>
-          <InputGroup label="Link"><StyledInput value={formData.link||''} onChange={(e) => setFormData({...formData, link: e.target.value})} /></InputGroup>
-          
-          {/* UPLOAD DE ÍCONE PADRONIZADO (Tracejado) */}
-          <InputGroup label="Ícone / Logo">
-             <div className="border border-dashed border-white/20 rounded-xl p-4 text-center hover:bg-white/5 transition-colors relative h-full flex flex-col items-center justify-center min-h-[120px]">
-                {formData.image ? ( <img src={formData.image} className="h-16 w-16 object-contain mb-2" /> ) : ( <i className="fa-solid fa-cube text-3xl text-white/20 mb-2"></i> )}
-                <label className="cursor-pointer text-neon-cyan text-sm font-bold hover:underline">
-                   {formData.image ? 'Alterar Ícone' : 'Escolher Ícone'}
-                   <input type="file" hidden accept="image/*" onChange={handleImage} />
-                </label>
-             </div>
-          </InputGroup>
-
-          <InputGroup label="Descrição"><NeonEditor value={formData.description||''} onChange={c => setFormData({...formData, description: c})} /></InputGroup>
-          
-          <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-             <label className="text-xs uppercase font-bold mb-2 block">Features</label>
-             <div className="flex gap-2 mb-2"><StyledInput value={featureInput} onChange={(e) => setFeatureInput(e.target.value)} /><Button onClick={() => { if(featureInput) { setFormData(prev => ({...prev, features: [...(prev.features||[]), featureInput]})); setFeatureInput(''); } }} variant="secondary">+</Button></div>
-             <div className="flex flex-wrap gap-2">{formData.features?.map((f, i) => <span key={i} className="bg-neon-cyan/20 px-2 py-1 rounded text-xs flex gap-2 items-center">{f} <i className="fa-solid fa-xmark cursor-pointer" onClick={() => setFormData(prev => ({...prev, features: prev.features?.filter((_, idx) => idx !== i)}))}></i></span>)}</div>
-          </div>
-
-          <div className="flex gap-2 mt-4"><Button type="submit">Salvar</Button><Button variant="secondary" onClick={() => setIsEditing(false)}>Cancelar</Button></div>
-       </form>
-    </div>
-  );
-
-  return (
-    <div className="animate-fade-in">
-       <div className="flex justify-between mb-6"><h3 className="text-xl font-bold">Microsaas</h3><Button onClick={() => { setFormData({status: 'Venda'}); setIsEditing(true); }}>Novo</Button></div>
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {items.map(item => (
-             <div key={item.id} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col group hover:-translate-y-1 transition-transform">
-                <div className="h-32 bg-gradient-to-br from-indigo-900 to-black relative flex items-center justify-center">
-                   {item.image ? <img src={item.image} className="h-16 w-auto object-contain z-10" /> : <i className="fa-solid fa-cube text-4xl text-white/20"></i>}
-                   <div className="absolute top-2 right-2 px-2 py-1 bg-black/50 rounded text-xs font-bold border border-white/10">{item.status}</div>
-                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                      <button onClick={() => { setFormData(item); setIsEditing(true); }} className="w-8 h-8 bg-white/20 rounded flex items-center justify-center hover:bg-neon-purple"><i className="fa-solid fa-pen"></i></button>
-                      <button onClick={async () => { if(confirm('Del?')) { await supabase.from('microsaas').delete().eq('id', item.id); load(); }}} className="w-8 h-8 bg-white/20 rounded flex items-center justify-center hover:bg-red-500"><i className="fa-solid fa-trash"></i></button>
-                   </div>
-                </div>
-                <div className="p-4 flex-grow">
-                   <div className="text-neon-cyan font-bold text-xs mb-1">{item.price}</div>
-                   <h4 className="font-bold text-lg mb-2">{item.name}</h4>
-                </div>
-             </div>
-          ))}
-       </div>
-    </div>
-  );
-};
-
 // --- PORTFOLIO VIEW ---
 const PortfolioView = () => {
   const [projects, setProjects] = useState<PortfolioItem[]>([]);
@@ -1007,15 +927,34 @@ const PortfolioView = () => {
   const [formData, setFormData] = useState<Partial<PortfolioItem>>({});
   const [techInput, setTechInput] = useState("");
   const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  
+  // States para Categorias do Portfolio
+  const [categories, setCategories] = useState<PortfolioCategory[]>([]);
+  const [newCatName, setNewCatName] = useState('');
+  const [showCatManager, setShowCatManager] = useState(false);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("portfolio").select("*").order("created_at", { ascending: false });
-    if(data) setProjects(data);
+    const { data: p } = await supabase.from("portfolio").select("*").order("created_at", { ascending: false });
+    if(p) setProjects(p);
+    const { data: c } = await supabase.from("portfolio_categories").select("*").order("name");
+    if(c) setCategories(c);
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const handleAddCategory = async () => {
+    if(!newCatName.trim()) return;
+    const { error } = await supabase.from('portfolio_categories').insert([{name: newCatName.trim()}]);
+    if(error) alert('Erro: ' + error.message);
+    else { setNewCatName(''); load(); }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.title) return alert("O título é obrigatório");
+
+    // Gera o slug se não existir
+    const slug = formData.slug || normalizeSlug(formData.title);
+
     const payload = { 
       title: formData.title, 
       category: formData.category, 
@@ -1024,6 +963,7 @@ const PortfolioView = () => {
       client: formData.client,
       year: formData.year,
       link: formData.link,
+      slug: slug, // Adicionado
       challenge: formData.challenge,
       solution: formData.solution,
       full_description: formData.full_description,
@@ -1096,20 +1036,61 @@ const PortfolioView = () => {
   if (isEditing) {
     return (
       <div className="max-w-4xl mx-auto bg-dark-glass border border-dark-border rounded-2xl p-8 backdrop-blur-md animate-fade-in">
-        <h3 className="text-xl font-bold mb-6">{formData.id ? 'Editar Projeto' : 'Novo Projeto'}</h3>
+        <div className="flex justify-between items-center mb-6">
+           <h3 className="text-xl font-bold">{formData.id ? 'Editar Projeto' : 'Novo Projeto'}</h3>
+           <Button variant="outline" onClick={() => setShowCatManager(!showCatManager)} className="text-xs">
+              <i className="fa-solid fa-tags"></i> Gerenciar Cats
+           </Button>
+        </div>
+
+        {/* GERENCIADOR DE CATEGORIAS DO PORTFOLIO */}
+        {showCatManager && (
+           <div className="mb-6 p-4 bg-white/5 rounded-xl border border-white/10 border-dashed animate-fade-in">
+              <h4 className="text-sm font-bold text-white/70 mb-3 uppercase">Categorias do Portfólio</h4>
+              <div className="flex gap-2 mb-4">
+                <StyledInput 
+                  placeholder="Nova categoria..." 
+                  value={newCatName} 
+                  onChange={e => setNewCatName(e.target.value)}
+                  className="!py-2"
+                />
+                <Button onClick={handleAddCategory} variant="secondary" className="!py-2"><i className="fa-solid fa-plus"></i></Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {categories.length === 0 && <span className="text-xs text-white/30 italic">Nenhuma categoria encontrada.</span>}
+                {categories.map(c => (
+                  <div key={c.id} className="bg-neon-purple/10 border border-neon-purple/30 px-3 py-1.5 rounded-lg text-xs font-medium text-white flex items-center gap-2 group hover:bg-neon-purple/20 transition-colors">
+                    {c.name}
+                    <button 
+                      type="button" 
+                      onClick={async (e) => {
+                         e.preventDefault(); 
+                         if(confirm(`Excluir a categoria "${c.name}"?`)) { 
+                           const { error } = await supabase.from('portfolio_categories').delete().eq('id', c.id);
+                           if(error) alert('Erro ao excluir: ' + error.message);
+                           else load(); 
+                         }
+                      }} 
+                      className="w-5 h-5 rounded flex items-center justify-center text-white/40 hover:text-red-400 hover:bg-white/10 transition-colors"
+                      title="Excluir Categoria"
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+           </div>
+        )}
+
         <form onSubmit={handleSave} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
              <InputGroup label="Título do Projeto">
                <StyledInput value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} required />
              </InputGroup>
              <InputGroup label="Categoria">
-                <StyledSelect value={formData.category || 'Web Design'} onChange={e => setFormData({...formData, category: e.target.value})}>
-                  <option value="Web Design">Web Design</option>
-                  <option value="E-commerce">E-commerce</option>
-                  <option value="App / Bubble">App / Bubble</option>
-                  <option value="Landing Page">Landing Page</option>
-                  <option value="Branding">Branding</option>
-                  <option value="Tráfego Pago">Tráfego Pago</option>
+                <StyledSelect value={formData.category || ''} onChange={e => setFormData({...formData, category: e.target.value})}>
+                  <option value="">Selecione...</option>
+                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </StyledSelect>
              </InputGroup>
              <InputGroup label="Cliente">
@@ -1124,6 +1105,20 @@ const PortfolioView = () => {
                </InputGroup>
              </div>
           </div>
+          
+          {/* CAMPO DE SLUG PARA O PORTFÓLIO */}
+          <InputGroup label="Slug do Projeto (URL)">
+              <div className="relative">
+                 <StyledInput 
+                    value={formData.slug||''} 
+                    onChange={(e) => setFormData({...formData, slug: e.target.value})} 
+                    onBlur={(e) => setFormData({...formData, slug: normalizeSlug(e.target.value)})}
+                    placeholder="ex: nome-do-projeto"
+                    className="pl-24"
+                 />
+                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-xs select-none">/projeto/</span>
+              </div>
+          </InputGroup>
 
           <div className="bg-white/5 p-4 rounded-xl border border-white/10">
             <label className="block mb-2 text-xs text-white/60 uppercase font-semibold">Tecnologias Utilizadas</label>
@@ -1174,12 +1169,13 @@ const PortfolioView = () => {
              <StyledTextArea value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} rows={2} placeholder="Aparece no card da home..." />
           </InputGroup>
 
+          {/* O DESAFIO e A SOLUÇÃO agora usam NEON EDITOR */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
              <InputGroup label="O Desafio">
-                <StyledTextArea value={formData.challenge || ''} onChange={e => setFormData({...formData, challenge: e.target.value})} rows={4} placeholder="Qual era o problema a ser resolvido?" />
+                <NeonEditor value={formData.challenge || ''} onChange={val => setFormData({...formData, challenge: val})} placeholder="Qual era o problema a ser resolvido?" />
              </InputGroup>
              <InputGroup label="A Solução">
-                <StyledTextArea value={formData.solution || ''} onChange={e => setFormData({...formData, solution: e.target.value})} rows={4} placeholder="Como você resolveu o problema?" />
+                <NeonEditor value={formData.solution || ''} onChange={val => setFormData({...formData, solution: val})} placeholder="Como você resolveu o problema?" />
              </InputGroup>
           </div>
 
@@ -1220,6 +1216,172 @@ const PortfolioView = () => {
            </div>
         ))}
       </div>
+    </div>
+  );
+};
+
+// --- MICROSAAS VIEW ---
+const MicrosaasView = () => {
+  const [items, setItems] = useState<MicrosaasItem[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState<Partial<MicrosaasItem>>({});
+  const [featureInput, setFeatureInput] = useState("");
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("microsaas").select("*").order("created_at", { ascending: false });
+    if(data) setItems(data);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name) return alert("O nome é obrigatório");
+    
+    const payload = { 
+      name: formData.name,
+      description: formData.description,
+      image: formData.image,
+      status: formData.status || 'Beta',
+      price: formData.price,
+      link: formData.link,
+      features: formData.features || []
+    };
+    
+    const { error } = formData.id
+      ? await supabase.from("microsaas").update(payload).eq("id", formData.id)
+      : await supabase.from("microsaas").insert([payload]);
+
+    if (error) alert("Erro: " + error.message);
+    else { setIsEditing(false); load(); }
+  };
+
+  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+     if(!e.target.files?.[0]) return;
+     const file = e.target.files[0];
+     const name = `ms_${Date.now()}_${file.name}`;
+     await supabase.storage.from("portfolio-images").upload(name, file);
+     const { data } = supabase.storage.from("portfolio-images").getPublicUrl(name);
+     setFormData(prev => ({ ...prev, image: data.publicUrl }));
+  };
+
+  const addFeature = () => {
+      if(!featureInput.trim()) return;
+      setFormData(prev => ({...prev, features: [...(prev.features || []), featureInput.trim()]}));
+      setFeatureInput("");
+  };
+
+  const removeFeature = (idx: number) => {
+      setFormData(prev => {
+          const newFeatures = [...(prev.features || [])];
+          newFeatures.splice(idx, 1);
+          return { ...prev, features: newFeatures };
+      });
+  };
+
+  if(isEditing) {
+      return (
+        <div className="max-w-4xl mx-auto bg-dark-glass border border-dark-border rounded-2xl p-8 backdrop-blur-md animate-fade-in">
+          <h3 className="text-xl font-bold mb-6">{formData.id ? 'Editar MicroSaaS' : 'Novo MicroSaaS'}</h3>
+          <form onSubmit={handleSave} className="space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <InputGroup label="Nome do Produto">
+                   <StyledInput value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                </InputGroup>
+                <InputGroup label="Status">
+                   <StyledSelect value={formData.status || 'Beta'} onChange={e => setFormData({...formData, status: e.target.value as any})}>
+                      <option value="Beta">Beta / Construção</option>
+                      <option value="Uso">Em Uso (Privado)</option>
+                      <option value="Venda">Venda / Aberto</option>
+                   </StyledSelect>
+                </InputGroup>
+                <InputGroup label="Preço (Texto)">
+                   <StyledInput value={formData.price || ''} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="Ex: R$ 49/mês ou Grátis" />
+                </InputGroup>
+                <InputGroup label="Link de Acesso">
+                   <StyledInput value={formData.link || ''} onChange={e => setFormData({...formData, link: e.target.value})} placeholder="https://..." />
+                </InputGroup>
+             </div>
+
+             <InputGroup label="Logo / Ícone">
+                <div className="flex items-center gap-4 p-4 border border-dashed border-white/20 rounded-xl bg-white/5">
+                   {formData.image ? <img src={formData.image} className="w-16 h-16 object-contain bg-black/20 rounded-lg p-2" /> : <div className="w-16 h-16 bg-white/10 rounded-lg flex items-center justify-center text-white/20"><i className="fa-solid fa-image"></i></div>}
+                   <label className="cursor-pointer text-neon-cyan font-bold hover:underline">
+                      Escolher Imagem
+                      <input type="file" hidden accept="image/*" onChange={handleImage} />
+                   </label>
+                </div>
+             </InputGroup>
+
+             <InputGroup label="Descrição">
+                <NeonEditor value={formData.description || ''} onChange={val => setFormData({...formData, description: val})} placeholder="Descreva o produto..." />
+             </InputGroup>
+
+             <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                <label className="block mb-2 text-xs text-white/60 uppercase font-semibold">Recursos / Features</label>
+                <div className="flex gap-2 mb-3">
+                   <StyledInput value={featureInput} onChange={e => setFeatureInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addFeature())} placeholder="Digite um recurso e enter..." className="flex-1" />
+                   <Button onClick={addFeature} variant="secondary"><i className="fa-solid fa-plus"></i></Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                   {formData.features?.map((feat, i) => (
+                      <span key={i} className="flex items-center gap-2 bg-neon-cyan/10 border border-neon-cyan/20 px-3 py-1 rounded-full text-sm text-neon-cyan">
+                         {feat}
+                         <button type="button" onClick={() => removeFeature(i)} className="hover:text-white"><i className="fa-solid fa-xmark"></i></button>
+                      </span>
+                   ))}
+                </div>
+             </div>
+
+             <div className="flex gap-3 pt-4 border-t border-white/10">
+               <Button type="submit" className="flex-1">Salvar</Button>
+               <Button variant="secondary" onClick={() => setIsEditing(false)}>Cancelar</Button>
+             </div>
+          </form>
+        </div>
+      );
+  }
+
+  return (
+    <div className="animate-fade-in">
+       <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold">Meus MicroSaaS</h3>
+          <Button onClick={() => { setFormData({status: 'Beta', features: []}); setIsEditing(true); }}><i className="fa-solid fa-plus"></i> Novo</Button>
+       </div>
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {items.map(item => (
+             <div key={item.id} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col group hover:bg-white/10 transition-colors">
+                <div className="p-6 flex items-start justify-between">
+                   <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center p-2 border border-white/10">
+                      {item.image ? <img src={item.image} className="w-full h-full object-contain" /> : <i className="fa-solid fa-cube text-white/40"></i>}
+                   </div>
+                   <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${item.status === 'Venda' ? 'bg-green-500/10 text-green-400 border-green-500/20' : item.status === 'Uso' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}`}>
+                      {item.status}
+                   </div>
+                </div>
+                <div className="px-6 pb-4 flex-grow">
+                   <h4 className="font-bold text-lg text-white mb-1">{item.name}</h4>
+                   <div className="text-sm text-white/60 line-clamp-2 mb-4" dangerouslySetInnerHTML={{__html: item.description}}></div>
+                   {item.features && item.features.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-4">
+                         {item.features.slice(0, 3).map((f, i) => (
+                            <span key={i} className="text-[10px] bg-black/30 px-2 py-0.5 rounded text-white/70">{f}</span>
+                         ))}
+                         {item.features.length > 3 && <span className="text-[10px] text-white/40">+{item.features.length - 3}</span>}
+                      </div>
+                   )}
+                </div>
+                <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between bg-black/20">
+                   <span className="font-mono text-xs text-neon-cyan">{item.price}</span>
+                   <div className="flex gap-2">
+                      <button onClick={() => { setFormData(item); setIsEditing(true); }} className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded"><i className="fa-solid fa-pen"></i></button>
+                      <button onClick={async () => { if(confirm('Excluir?')) { await supabase.from('microsaas').delete().eq('id', item.id); load(); } }} className="p-2 text-white/60 hover:text-red-400 hover:bg-white/10 rounded"><i className="fa-solid fa-trash"></i></button>
+                   </div>
+                </div>
+             </div>
+          ))}
+          {items.length === 0 && <div className="col-span-full text-center py-12 text-white/30 italic">Nenhum produto cadastrado.</div>}
+       </div>
     </div>
   );
 };
