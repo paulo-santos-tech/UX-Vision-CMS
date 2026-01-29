@@ -106,6 +106,7 @@ export interface PageView {
 export interface UserRole {
   user_id: string;
   role: 'admin' | 'editor';
+  email?: string; // Adicionado para exibição na lista de equipe
 }
 
 // Define as telas disponíveis para navegação

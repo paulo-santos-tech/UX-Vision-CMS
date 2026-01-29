@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase, supabaseUrl, supabaseKey } from './supabaseClient';
 // CORREÇÃO CRÍTICA: Uso de 'import type' para corrigir o erro do TypeScript (isolatedModules)
-import type { PortfolioItem, BlogPost, BlogCategory, SiteSettings, ViewState, MicrosaasItem, PageView, PortfolioCategory } from './types';
+import type { PortfolioItem, BlogPost, BlogCategory, SiteSettings, ViewState, MicrosaasItem, PageView, PortfolioCategory, UserRole } from './types';
 
 // IMPORTAÇÃO DO LOGO (Garante que funcione em Produção e Dev)
 import logoImg from './assets/logo.svg';
@@ -287,11 +287,27 @@ const App: React.FC = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); setSession(null); };
 
+  // Função para ativar o modo de demonstração
+  const handleDemoLogin = () => {
+    setSession({
+      user: {
+        id: 'demo-user-id',
+        email: 'visitante@uxvision.com',
+        user_metadata: {},
+        app_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString()
+      }
+    });
+    setRole('admin');
+    setLoading(false);
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-dark-bg text-white"><LoadingSpinner /></div>;
 
   return (
     <div className="min-h-screen text-white font-sans selection:bg-neon-purple/30 selection:text-white">
-      {!session ? <LoginScreen /> : (
+      {!session ? <LoginScreen onDemoLogin={handleDemoLogin} /> : (
         <div className="max-w-7xl mx-auto px-4 pb-20">
           <Header email={session.user.email} role={role} onLogout={handleLogout} />
           <Navigation currentView={view} setView={setView} role={role} />
@@ -313,36 +329,74 @@ const App: React.FC = () => {
 // 3. TELAS
 // ============================================================================
 
-const LoginScreen = () => {
+const LoginScreen = ({ onDemoLogin }: { onDemoLogin: () => void }) => {
+  const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError("Credenciais inválidas.");
+    
+    let result;
+    if (isRegistering) {
+       result = await supabase.auth.signUp({ email, password });
+    } else {
+       result = await supabase.auth.signInWithPassword({ email, password });
+    }
+
+    const { error: authError } = result;
+    
+    if (authError) {
+       setError(authError.message);
+    } else if (isRegistering) {
+       alert("Cadastro realizado! Você pode entrar agora ou verificar seu e-mail.");
+       setIsRegistering(false);
+    }
     setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-dark-glass backdrop-blur-xl border border-dark-border rounded-2xl p-8 shadow-2xl">
+      <div className="w-full max-w-md bg-dark-glass backdrop-blur-xl border border-dark-border rounded-2xl p-8 shadow-2xl transition-all duration-500">
         <div className="flex justify-center mb-8"><img src={logoImg} alt="UX Vision" className="h-14 w-auto object-contain opacity-90" /></div>
-        <h2 className="text-2xl font-bold text-center mb-6">Login</h2>
-        <form onSubmit={handleLogin}>
+        <h2 className="text-2xl font-bold text-center mb-2">{isRegistering ? 'Criar Conta' : 'Login'}</h2>
+        <p className="text-center text-white/50 text-sm mb-6">{isRegistering ? 'Preencha os dados para acessar o CMS.' : 'Bem-vindo de volta.'}</p>
+        
+        <form onSubmit={handleSubmit}>
           <InputGroup icon="fa-solid fa-envelope" className="mb-4"><StyledInput type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} required hasIcon /></InputGroup>
           <InputGroup icon="fa-solid fa-lock" className="mb-6">
             <div className="relative"><StyledInput type={showPassword ? "text" : "password"} placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required hasIcon />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white z-20"><i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i></button>
             </div>
           </InputGroup>
-          <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</Button>
-          {error && <p className="mt-4 text-red-400 text-sm text-center">{error}</p>}
+          
+          <Button type="submit" className="w-full mb-4" disabled={loading}>
+             {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegistering ? 'Cadastrar' : 'Entrar')}
+          </Button>
+
+          {/* BOTÃO DE ACESSO DEMO (VISITANTE) */}
+          {!isRegistering && (
+            <button 
+              type="button" 
+              onClick={onDemoLogin} 
+              className="w-full mb-4 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-transparent border border-white/20 text-white/70 hover:text-white hover:border-neon-cyan/50 hover:bg-neon-cyan/5 group"
+            >
+              <i className="fa-solid fa-rocket group-hover:text-neon-cyan transition-colors"></i> Acesso Demo (Visitante)
+            </button>
+          )}
+          
+          {error && <p className="mb-4 text-red-400 text-sm text-center bg-red-500/10 py-2 rounded border border-red-500/20">{error}</p>}
+          
+          <div className="text-center">
+             <button type="button" onClick={() => { setIsRegistering(!isRegistering); setError(''); }} className="text-sm text-neon-cyan hover:underline">
+                {isRegistering ? 'Já tem uma conta? Faça Login' : 'Não tem acesso? Cadastre-se'}
+             </button>
+          </div>
         </form>
       </div>
     </div>
@@ -1428,12 +1482,29 @@ const MediaView = () => {
   );
 };
 
-// --- SETTINGS VIEW ---
+// --- SETTINGS VIEW (ATUALIZADO COM ABA DE EQUIPE) ---
 const SettingsView = () => {
+  const [activeTab, setActiveTab] = useState<'general' | 'team'>('general');
   const [data, setData] = useState<Partial<SiteSettings>>({});
   const [deploying, setDeploying] = useState(false);
+  
+  // States para Equipe
+  const [teamMembers, setTeamMembers] = useState<UserRole[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(false);
 
-  useEffect(() => { supabase.from("site_settings").select("*").eq("id", 1).single().then(({data}) => { if(data) setData(data); }); }, []);
+  useEffect(() => { 
+     // Carrega configurações gerais
+     supabase.from("site_settings").select("*").eq("id", 1).single().then(({data}) => { if(data) setData(data); });
+     // Carrega equipe
+     loadTeam();
+  }, []);
+
+  const loadTeam = async () => {
+     setLoadingTeam(true);
+     const { data } = await supabase.from("user_roles").select("*");
+     if(data) setTeamMembers(data);
+     setLoadingTeam(false);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1460,6 +1531,21 @@ const SettingsView = () => {
     setDeploying(false);
   };
 
+  const handleRoleChange = async (userId: string, newRole: string) => {
+     if(!confirm("Tem certeza que deseja alterar o cargo deste usuário?")) return;
+     const { error } = await supabase.from('user_roles').update({ role: newRole }).eq('user_id', userId);
+     if(error) alert("Erro: " + error.message);
+     else loadTeam();
+  };
+
+  const handleRemoveUser = async (userId: string) => {
+     if(!confirm("Remover o acesso deste usuário? Ele não poderá mais logar no CMS.")) return;
+     // Nota: Isso remove apenas a permissão da tabela user_roles. O usuário continua no Auth, mas sem role, o app pode bloquear.
+     const { error } = await supabase.from('user_roles').delete().eq('user_id', userId);
+     if(error) alert("Erro: " + error.message);
+     else loadTeam();
+  };
+
   const trackerSnippet = `
 // Copie este código para o seu site frontend
 import { createClient } from '@supabase/supabase-js';
@@ -1483,73 +1569,136 @@ trackView();
 `;
 
   return (
-    <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
-       {/* COLUNA 1: PERFIL + SOCIAL + RODAPÉ */}
-       <div className="space-y-6">
-          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
-             <h3 className="text-lg font-bold mb-6 text-neon-cyan">Perfil & Social</h3>
-             <div className="flex flex-col items-center mb-6">
-                <div className="w-24 h-24 rounded-full bg-white/10 overflow-hidden mb-2 relative group cursor-pointer border border-white/20">
-                   <img src={data.author_avatar || "https://via.placeholder.com/100"} className="w-full h-full object-cover" />
-                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><i className="fa-solid fa-camera"></i></div>
-                   <input type="file" hidden className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleAvatar} />
+    <div className="animate-fade-in">
+       {/* Abas Superiores */}
+       <div className="flex gap-4 mb-6 border-b border-white/10 pb-2">
+          <button onClick={() => setActiveTab('general')} className={`pb-2 px-2 text-sm font-bold transition-colors border-b-2 ${activeTab === 'general' ? 'text-white border-neon-cyan' : 'text-white/40 border-transparent hover:text-white'}`}>Geral</button>
+          <button onClick={() => setActiveTab('team')} className={`pb-2 px-2 text-sm font-bold transition-colors border-b-2 ${activeTab === 'team' ? 'text-white border-neon-cyan' : 'text-white/40 border-transparent hover:text-white'}`}>Gerenciar Equipe</button>
+       </div>
+
+       {activeTab === 'team' ? (
+          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md animate-fade-in">
+             <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="text-xl font-bold text-white">Equipe do CMS</h3>
+                   <p className="text-sm text-white/50">Gerencie quem tem acesso ao painel administrativo.</p>
+                </div>
+                <div className="flex gap-2">
+                   <Button variant="outline" onClick={loadTeam}><i className="fa-solid fa-rotate"></i> Atualizar</Button>
+                   <Button onClick={() => alert("Para adicionar um usuário:\n1. Saia da sua conta.\n2. Clique em 'Cadastrar' na tela de login.\n3. Crie a conta com e-mail e senha.\n4. Logue como Admin novamente e altere o cargo aqui.")}><i className="fa-solid fa-user-plus"></i> Novo Usuário</Button>
                 </div>
              </div>
-             <InputGroup label="Nome"><StyledInput value={data.author_name||''} onChange={(e) => setData({...data, author_name: e.target.value})} /></InputGroup>
-             <InputGroup label="Bio"><StyledTextArea value={data.author_bio||''} onChange={(e) => setData({...data, author_bio: e.target.value})} rows={3} /></InputGroup>
-             
-             <div className="grid grid-cols-2 gap-4 mt-6">
-                <InputGroup icon="fa-brands fa-whatsapp"><StyledInput placeholder="WhatsApp" value={data.whatsapp || ''} onChange={e => setData({...data, whatsapp: e.target.value})} hasIcon /></InputGroup>
-                <InputGroup icon="fa-brands fa-instagram"><StyledInput placeholder="Instagram" value={data.instagram || ''} onChange={e => setData({...data, instagram: e.target.value})} hasIcon /></InputGroup>
-                <InputGroup icon="fa-brands fa-linkedin"><StyledInput placeholder="LinkedIn" value={data.linkedin || ''} onChange={e => setData({...data, linkedin: e.target.value})} hasIcon /></InputGroup>
-                <InputGroup icon="fa-brands fa-facebook"><StyledInput placeholder="Facebook" value={data.facebook || ''} onChange={e => setData({...data, facebook: e.target.value})} hasIcon /></InputGroup>
-                <InputGroup icon="fa-brands fa-telegram"><StyledInput placeholder="Telegram" value={data.telegram || ''} onChange={e => setData({...data, telegram: e.target.value})} hasIcon /></InputGroup>
+
+             <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                   <thead>
+                      <tr className="text-xs text-white/40 uppercase border-b border-white/10">
+                         <th className="py-3 font-semibold">Usuário</th>
+                         <th className="py-3 font-semibold">Cargo (Role)</th>
+                         <th className="py-3 font-semibold text-right">Ações</th>
+                      </tr>
+                   </thead>
+                   <tbody>
+                      {teamMembers.map(member => (
+                         <tr key={member.user_id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="py-4 flex items-center gap-3">
+                               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20 flex items-center justify-center text-xs font-bold text-white border border-white/10">
+                                  {member.email ? member.email[0].toUpperCase() : <i className="fa-solid fa-user"></i>}
+                               </div>
+                               <span className="text-sm text-white/90 font-medium">{member.email || "Email oculto"}</span>
+                            </td>
+                            <td className="py-4">
+                               <select 
+                                 value={member.role} 
+                                 onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
+                                 className={`bg-black/20 border border-white/10 rounded px-2 py-1 text-xs font-bold uppercase tracking-wider outline-none focus:border-neon-purple ${member.role === 'admin' ? 'text-neon-purple border-neon-purple/30' : 'text-white/60'}`}
+                               >
+                                  <option value="editor">Editor</option>
+                                  <option value="admin">Admin</option>
+                               </select>
+                            </td>
+                            <td className="py-4 text-right">
+                               <button onClick={() => handleRemoveUser(member.user_id)} className="text-white/40 hover:text-red-400 transition-colors p-2" title="Remover Acesso">
+                                  <i className="fa-solid fa-trash"></i>
+                               </button>
+                            </td>
+                         </tr>
+                      ))}
+                   </tbody>
+                </table>
+                {teamMembers.length === 0 && !loadingTeam && <div className="text-center py-8 text-white/30 italic">Nenhum membro encontrado.</div>}
              </div>
           </div>
-          
-          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
-             <h3 className="text-lg font-bold mb-4">Rodapé</h3>
-             <InputGroup label="Texto do Rodapé (Copyright)">
-                <StyledInput value={data.footer_text || ''} onChange={e => setData({...data, footer_text: e.target.value})} placeholder="© 2024 UX Vision..." />
-             </InputGroup>
-          </div>
-       </div>
-
-       {/* COLUNA 2: DEPLOY + PIXELS + SCRIPTS */}
-       <div className="space-y-6">
-          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><i className="fa-solid fa-server text-6xl text-white"></i></div>
-             <h3 className="font-bold text-lg mb-4 text-green-400">Deploy</h3>
-             <p className="text-xs text-white/60 mb-4">Dispare uma atualização manual no frontend.</p>
-             <Button onClick={handleTriggerDeploy} disabled={deploying} className={`w-full ${deploying ? 'animate-pulse' : ''}`}>{deploying ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Atualizando...</> : <><i className="fa-solid fa-bolt"></i> Publicar Alterações</>}</Button>
-          </div>
-
-          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
-             <h3 className="text-lg font-bold mb-4 text-neon-purple">Pixels & Analytics</h3>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <InputGroup label="GA4 ID"><StyledInput value={data.pixel_google||''} onChange={(e) => setData({...data, pixel_google: e.target.value})} placeholder="G-XXXXX" /></InputGroup>
-               <InputGroup label="Meta Pixel"><StyledInput value={data.pixel_meta||''} onChange={(e) => setData({...data, pixel_meta: e.target.value})} placeholder="ID 12345..." /></InputGroup>
-               <InputGroup label="TikTok Pixel"><StyledInput value={data.pixel_tiktok||''} onChange={(e) => setData({...data, pixel_tiktok: e.target.value})} placeholder="ID..." /></InputGroup>
-               <InputGroup label="LinkedIn Tag"><StyledInput value={data.pixel_linkedin||''} onChange={(e) => setData({...data, pixel_linkedin: e.target.value})} placeholder="ID..." /></InputGroup>
+       ) : (
+          <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
+             {/* COLUNA 1: PERFIL + SOCIAL + RODAPÉ */}
+             <div className="space-y-6">
+                <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
+                   <h3 className="text-lg font-bold mb-6 text-neon-cyan">Perfil & Social</h3>
+                   <div className="flex flex-col items-center mb-6">
+                      <div className="w-24 h-24 rounded-full bg-white/10 overflow-hidden mb-2 relative group cursor-pointer border border-white/20">
+                         <img src={data.author_avatar || "https://via.placeholder.com/100"} className="w-full h-full object-cover" />
+                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><i className="fa-solid fa-camera"></i></div>
+                         <input type="file" hidden className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleAvatar} />
+                      </div>
+                   </div>
+                   <InputGroup label="Nome"><StyledInput value={data.author_name||''} onChange={(e) => setData({...data, author_name: e.target.value})} /></InputGroup>
+                   <InputGroup label="Bio"><StyledTextArea value={data.author_bio||''} onChange={(e) => setData({...data, author_bio: e.target.value})} rows={3} /></InputGroup>
+                   
+                   <div className="grid grid-cols-2 gap-4 mt-6">
+                      <InputGroup icon="fa-brands fa-whatsapp"><StyledInput placeholder="WhatsApp" value={data.whatsapp || ''} onChange={e => setData({...data, whatsapp: e.target.value})} hasIcon /></InputGroup>
+                      <InputGroup icon="fa-brands fa-instagram"><StyledInput placeholder="Instagram" value={data.instagram || ''} onChange={e => setData({...data, instagram: e.target.value})} hasIcon /></InputGroup>
+                      <InputGroup icon="fa-brands fa-linkedin"><StyledInput placeholder="LinkedIn" value={data.linkedin || ''} onChange={e => setData({...data, linkedin: e.target.value})} hasIcon /></InputGroup>
+                      <InputGroup icon="fa-brands fa-facebook"><StyledInput placeholder="Facebook" value={data.facebook || ''} onChange={e => setData({...data, facebook: e.target.value})} hasIcon /></InputGroup>
+                      <InputGroup icon="fa-brands fa-telegram"><StyledInput placeholder="Telegram" value={data.telegram || ''} onChange={e => setData({...data, telegram: e.target.value})} hasIcon /></InputGroup>
+                   </div>
+                </div>
+                
+                <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
+                   <h3 className="text-lg font-bold mb-4">Rodapé</h3>
+                   <InputGroup label="Texto do Rodapé (Copyright)">
+                      <StyledInput value={data.footer_text || ''} onChange={e => setData({...data, footer_text: e.target.value})} placeholder="© 2024 UX Vision..." />
+                   </InputGroup>
+                </div>
              </div>
-          </div>
 
-          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
-             <h3 className="text-lg font-bold mb-4">Scripts Globais</h3>
-             <InputGroup label="HEAD Scripts"><StyledTextArea value={data.head_scripts||''} onChange={(e) => setData({...data, head_scripts: e.target.value})} className="font-mono text-xs" placeholder="<script>...</script>" /></InputGroup>
-             <InputGroup label="BODY Scripts"><StyledTextArea value={data.body_scripts||''} onChange={(e) => setData({...data, body_scripts: e.target.value})} className="font-mono text-xs" placeholder="<script>...</script>" /></InputGroup>
-             <Button type="submit" className="w-full mt-4">Salvar Configurações</Button>
-          </div>
+             {/* COLUNA 2: DEPLOY + PIXELS + SCRIPTS */}
+             <div className="space-y-6">
+                <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
+                   <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><i className="fa-solid fa-server text-6xl text-white"></i></div>
+                   <h3 className="font-bold text-lg mb-4 text-green-400">Deploy</h3>
+                   <p className="text-xs text-white/60 mb-4">Dispare uma atualização manual no frontend.</p>
+                   <Button onClick={handleTriggerDeploy} disabled={deploying} className={`w-full ${deploying ? 'animate-pulse' : ''}`}>{deploying ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Atualizando...</> : <><i className="fa-solid fa-bolt"></i> Publicar Alterações</>}</Button>
+                </div>
 
-          <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
-             <h3 className="text-lg font-bold mb-4 text-white/50">Instalação</h3>
-             <div className="bg-black/40 p-4 rounded text-[10px] font-mono overflow-x-auto relative group">
-                {trackerSnippet.trim()}
-                <button type="button" onClick={() => navigator.clipboard.writeText(trackerSnippet)} className="absolute top-2 right-2 text-white/50 hover:text-white"><i className="fa-solid fa-copy"></i></button>
+                <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
+                   <h3 className="text-lg font-bold mb-4 text-neon-purple">Pixels & Analytics</h3>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <InputGroup label="GA4 ID"><StyledInput value={data.pixel_google||''} onChange={(e) => setData({...data, pixel_google: e.target.value})} placeholder="G-XXXXX" /></InputGroup>
+                     <InputGroup label="Meta Pixel"><StyledInput value={data.pixel_meta||''} onChange={(e) => setData({...data, pixel_meta: e.target.value})} placeholder="ID 12345..." /></InputGroup>
+                     <InputGroup label="TikTok Pixel"><StyledInput value={data.pixel_tiktok||''} onChange={(e) => setData({...data, pixel_tiktok: e.target.value})} placeholder="ID..." /></InputGroup>
+                     <InputGroup label="LinkedIn Tag"><StyledInput value={data.pixel_linkedin||''} onChange={(e) => setData({...data, pixel_linkedin: e.target.value})} placeholder="ID..." /></InputGroup>
+                   </div>
+                </div>
+
+                <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
+                   <h3 className="text-lg font-bold mb-4">Scripts Globais</h3>
+                   <InputGroup label="HEAD Scripts"><StyledTextArea value={data.head_scripts||''} onChange={(e) => setData({...data, head_scripts: e.target.value})} className="font-mono text-xs" placeholder="<script>...</script>" /></InputGroup>
+                   <InputGroup label="BODY Scripts"><StyledTextArea value={data.body_scripts||''} onChange={(e) => setData({...data, body_scripts: e.target.value})} className="font-mono text-xs" placeholder="<script>...</script>" /></InputGroup>
+                   <Button type="submit" className="w-full mt-4">Salvar Configurações</Button>
+                </div>
+
+                <div className="bg-dark-glass border border-dark-border rounded-2xl p-6 backdrop-blur-md">
+                   <h3 className="text-lg font-bold mb-4 text-white/50">Instalação</h3>
+                   <div className="bg-black/40 p-4 rounded text-[10px] font-mono overflow-x-auto relative group">
+                      {trackerSnippet.trim()}
+                      <button type="button" onClick={() => navigator.clipboard.writeText(trackerSnippet)} className="absolute top-2 right-2 text-white/50 hover:text-white"><i className="fa-solid fa-copy"></i></button>
+                   </div>
+                </div>
              </div>
-          </div>
-       </div>
-    </form>
+          </form>
+       )}
+    </div>
   );
 };
 
