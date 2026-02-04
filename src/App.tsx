@@ -180,7 +180,7 @@ const NeonEditor = ({ value, onChange, placeholder }: { value: string, onChange:
   };
 
   return (
-    <div className="border border-white/10 rounded-xl overflow-hidden bg-black/20 flex flex-col h-[400px] shadow-inner">
+    <div className="border border-white/10 rounded-xl overflow-hidden bg-black/40 flex flex-col h-[400px] shadow-inner">
       <input type="file" hidden ref={fileInputRef} accept="image/*" onChange={handleImageUpload} />
       
       {/* TOOLBAR */}
@@ -266,6 +266,27 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<'admin' | 'editor'>('editor');
   const [view, setView] = useState<ViewState>('dashboard');
+  
+  // Theme Management
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'light' ? 'light' : 'dark';
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.body.classList.add('light-mode');
+    } else {
+      document.body.classList.remove('light-mode');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -306,10 +327,10 @@ const App: React.FC = () => {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-dark-bg text-white"><LoadingSpinner /></div>;
 
   return (
-    <div className="min-h-screen text-white font-sans selection:bg-neon-purple/30 selection:text-white">
+    <div className="min-h-screen text-white font-sans selection:bg-neon-purple/30 selection:text-white transition-colors duration-300">
       {!session ? <LoginScreen onDemoLogin={handleDemoLogin} /> : (
         <div className="max-w-7xl mx-auto px-4 pb-20">
-          <Header email={session.user.email} role={role} onLogout={handleLogout} />
+          <Header email={session.user.email} role={role} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
           <Navigation currentView={view} setView={setView} role={role} />
           <main className="mt-8">
             {view === 'dashboard' && <DashboardView />}
@@ -330,7 +351,6 @@ const App: React.FC = () => {
 // ============================================================================
 
 const LoginScreen = ({ onDemoLogin }: { onDemoLogin: () => void }) => {
-  const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -342,20 +362,11 @@ const LoginScreen = ({ onDemoLogin }: { onDemoLogin: () => void }) => {
     setLoading(true);
     setError('');
     
-    let result;
-    if (isRegistering) {
-       result = await supabase.auth.signUp({ email, password });
-    } else {
-       result = await supabase.auth.signInWithPassword({ email, password });
-    }
+    // Apenas Login
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-    const { error: authError } = result;
-    
     if (authError) {
        setError(authError.message);
-    } else if (isRegistering) {
-       alert("Cadastro realizado! Você pode entrar agora ou verificar seu e-mail.");
-       setIsRegistering(false);
     }
     setLoading(false);
   };
@@ -364,8 +375,8 @@ const LoginScreen = ({ onDemoLogin }: { onDemoLogin: () => void }) => {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-dark-glass backdrop-blur-xl border border-dark-border rounded-2xl p-8 shadow-2xl transition-all duration-500">
         <div className="flex justify-center mb-8"><img src={logoImg} alt="UX Vision" className="h-14 w-auto object-contain opacity-90" /></div>
-        <h2 className="text-2xl font-bold text-center mb-2">{isRegistering ? 'Criar Conta' : 'Login'}</h2>
-        <p className="text-center text-white/50 text-sm mb-6">{isRegistering ? 'Preencha os dados para acessar o CMS.' : 'Bem-vindo de volta.'}</p>
+        <h2 className="text-2xl font-bold text-center mb-2">Login</h2>
+        <p className="text-center text-white/50 text-sm mb-6">Bem-vindo de volta.</p>
         
         <form onSubmit={handleSubmit}>
           <InputGroup icon="fa-solid fa-envelope" className="mb-4"><StyledInput type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} required hasIcon /></InputGroup>
@@ -376,37 +387,42 @@ const LoginScreen = ({ onDemoLogin }: { onDemoLogin: () => void }) => {
           </InputGroup>
           
           <Button type="submit" className="w-full mb-4" disabled={loading}>
-             {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegistering ? 'Cadastrar' : 'Entrar')}
+             {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Entrar'}
           </Button>
 
           {/* BOTÃO DE ACESSO DEMO (VISITANTE) */}
-          {!isRegistering && (
-            <button 
-              type="button" 
-              onClick={onDemoLogin} 
-              className="w-full mb-4 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-transparent border border-white/20 text-white/70 hover:text-white hover:border-neon-cyan/50 hover:bg-neon-cyan/5 group"
-            >
-              <i className="fa-solid fa-rocket group-hover:text-neon-cyan transition-colors"></i> Acesso Demo (Visitante)
-            </button>
-          )}
+          <button 
+            type="button" 
+            onClick={onDemoLogin} 
+            className="w-full mb-4 py-3 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-transparent border border-white/20 text-white/70 hover:text-white hover:border-neon-cyan/50 hover:bg-neon-cyan/5 group"
+          >
+            <i className="fa-solid fa-rocket group-hover:text-neon-cyan transition-colors"></i> Acesso Demo (Visitante)
+          </button>
           
           {error && <p className="mb-4 text-red-400 text-sm text-center bg-red-500/10 py-2 rounded border border-red-500/20">{error}</p>}
-          
-          <div className="text-center">
-             <button type="button" onClick={() => { setIsRegistering(!isRegistering); setError(''); }} className="text-sm text-neon-cyan hover:underline">
-                {isRegistering ? 'Já tem uma conta? Faça Login' : 'Não tem acesso? Cadastre-se'}
-             </button>
-          </div>
         </form>
       </div>
     </div>
   );
 };
 
-const Header = ({ email, role, onLogout }: { email: string, role: string, onLogout: () => void }) => (
-  <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/10 px-6 py-4 rounded-b-2xl mb-6 flex justify-between items-center">
+const Header = ({ email, role, onLogout, theme, onToggleTheme }: { email: string, role: string, onLogout: () => void, theme: string, onToggleTheme: () => void }) => (
+  <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-dark-border px-6 py-4 rounded-b-2xl mb-6 flex justify-between items-center transition-colors">
     <div className="flex items-center gap-3"><img src={logoImg} alt="UX Vision" className="h-8 w-auto object-contain" /><span className="text-xs font-bold uppercase tracking-wider px-2 py-1 bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 rounded-full">{role}</span></div>
-    <div className="flex items-center gap-4"><span className="hidden sm:block text-white/80 text-sm">{email}</span><button onClick={onLogout} className="p-2 rounded-lg border border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"><i className="fa-solid fa-power-off"></i></button></div>
+    <div className="flex items-center gap-4">
+      <span className="hidden sm:block text-white/80 text-sm">{email}</span>
+      
+      {/* Botão de Tema */}
+      <button 
+        onClick={onToggleTheme} 
+        className="w-10 h-10 rounded-lg border border-white/10 text-white/60 hover:bg-white/10 hover:text-neon-cyan transition-colors flex items-center justify-center"
+        title={theme === 'dark' ? 'Mudar para Light' : 'Mudar para Dark'}
+      >
+        <i className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
+      </button>
+
+      <button onClick={onLogout} className="p-2 rounded-lg border border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"><i className="fa-solid fa-power-off"></i></button>
+    </div>
   </header>
 );
 
@@ -927,8 +943,8 @@ const BlogView = () => {
              </div>
           </div>
 
-          {/* GOOGLE PREVIEW COMPONENT */}
-          <div className="bg-white text-black rounded-xl overflow-hidden shadow-lg border border-white/20">
+          {/* GOOGLE PREVIEW COMPONENT (ATUALIZADO COM CORES FIXAS) */}
+          <div className="bg-[#ffffff] text-[#000000] rounded-xl overflow-hidden shadow-lg border border-white/20">
             <div className="bg-[#1f1f1f] p-3 flex justify-between items-center text-white border-b border-white/10">
               <span className="text-xs font-bold flex items-center gap-2"><i className="fa-brands fa-google"></i> Google Preview</span>
               <div className="flex bg-white/10 rounded-full p-1 gap-1">
@@ -936,7 +952,7 @@ const BlogView = () => {
                 <button onClick={() => setPreviewMode('desktop')} className={`p-1.5 rounded-full text-xs transition-colors ${previewMode === 'desktop' ? 'bg-neon-cyan/20 text-neon-cyan' : 'text-white/50 hover:text-white'}`}><i className="fa-solid fa-desktop"></i></button>
               </div>
             </div>
-            <div className="p-4 font-arial max-w-full overflow-hidden bg-white">
+            <div className="p-4 font-arial max-w-full overflow-hidden bg-[#ffffff]">
                {previewMode === 'mobile' ? (
                   <div className="text-sm">
                     <div className="flex items-center gap-2 mb-2">
