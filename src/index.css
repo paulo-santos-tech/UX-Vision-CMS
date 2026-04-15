@@ -1,11 +1,36 @@
-/* Estilos Globais Personalizados */
+:root {
+  --bg-base: 5 5 5;
+  --surface: 20 20 20;
+  --surface-elevated: 30 30 30;
+  --border: 38 38 38; /* Cinza bem escuro para remover o excesso de bordas agressivas */
+  --text-primary: 255 255 255;
+  --text-muted: 156 163 175;
+}
+
+body.light-mode {
+  --bg-base: 248 250 252;
+  --surface: 255 255 255;
+  --surface-elevated: 241 245 249;
+  --border: 226 232 240;
+  --text-primary: 15 23 42;
+  --text-muted: 100 116 139;
+}
+
 body {
-  background-color: #050505;
-  color: white;
-  /* Garante suavidade nas fontes */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Tipografia Hierarquica UX Premium */
+.text-display { font-size: 1.875rem; line-height: 2.25rem; font-weight: 800; letter-spacing: -0.025em; color: rgb(var(--text-primary)); }
+@media (min-width: 768px) { .text-display { font-size: 2.25rem; line-height: 2.5rem; } }
+
+.text-heading { font-size: 1.25rem; line-height: 1.75rem; font-weight: 700; letter-spacing: -0.025em; color: rgb(var(--text-primary)); }
+@media (min-width: 768px) { .text-heading { font-size: 1.5rem; line-height: 2rem; } }
+
+.text-overline { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.2em; font-weight: 600; color: rgb(var(--text-muted)); }
+.text-body { font-size: 0.875rem; line-height: 1.25rem; color: rgb(var(--text-primary)); }
+
 
 /* Custom Scrollbar (Barra de rolagem personalizada) */
 ::-webkit-scrollbar {
@@ -32,6 +57,28 @@ body {
   animation: fadeIn 0.4s ease-out forwards;
 }
 
+/* Custom Interaction States UX Vision */
+button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid #00e2ff;
+  outline-offset: 2px;
+  box-shadow: 0 0 10px rgba(0, 226, 255, 0.3);
+}
+
+body.light-mode input:focus-visible, 
+body.light-mode textarea:focus-visible, 
+body.light-mode select:focus-visible {
+  outline: 2px solid #b200ff;
+  box-shadow: 0 0 10px rgba(178, 0, 255, 0.2);
+}
+
 /* =========================================
    NEON EDITOR CONTENT STYLES
    Estilos para o conteúdo DENTRO do editor e do preview
@@ -39,7 +86,7 @@ body {
 .neon-editor-content h2 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #fff;
+  color: rgb(var(--text-primary));
   margin-top: 1.5em;
   margin-bottom: 0.5em;
 }
@@ -47,7 +94,7 @@ body {
 .neon-editor-content h3 {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #e5e5e5;
+  color: rgb(var(--text-primary));
   margin-top: 1.2em;
   margin-bottom: 0.5em;
 }
@@ -73,21 +120,21 @@ body {
 .neon-editor-content p {
   margin-bottom: 1em;
   line-height: 1.6;
-  color: #d4d4d4;
+  color: rgb(var(--text-muted));
 }
 
 .neon-editor-content ul {
   list-style-type: disc;
   padding-left: 1.5em;
   margin-bottom: 1em;
-  color: #d4d4d4;
+  color: rgb(var(--text-muted));
 }
 
 .neon-editor-content ol {
   list-style-type: decimal;
   padding-left: 1.5em;
   margin-bottom: 1em;
-  color: #d4d4d4;
+  color: rgb(var(--text-muted));
 }
 
 .neon-editor-content blockquote {
@@ -96,7 +143,7 @@ body {
   margin-left: 0;
   margin-bottom: 1em;
   font-style: italic;
-  color: #a0a0a0;
+  color: rgb(var(--text-muted));
   background: rgba(178, 0, 255, 0.05);
   padding: 10px;
   border-radius: 0 8px 8px 0;
@@ -113,10 +160,10 @@ body {
   height: auto;
   border-radius: 8px;
   margin: 1em 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgb(var(--border) / 0.1);
 }
 
 .neon-editor-content b, .neon-editor-content strong {
-  color: #fff;
+  color: rgb(var(--text-primary));
   font-weight: 700;
 }

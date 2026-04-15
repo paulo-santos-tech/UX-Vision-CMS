@@ -91,6 +91,7 @@ export interface SiteSettings {
   footer_text: string;
   head_scripts: string;
   body_scripts: string;
+  enabled_modules?: Partial<Record<ViewState, boolean>>;
 }
 
 // Dados de Analytics
