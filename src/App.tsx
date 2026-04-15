@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider } from './app/providers/AuthProvider';
 import { FeatureFlagsProvider } from './app/providers/FeatureFlagsProvider';
 import { useFeatureFlags } from './app/providers/useFeatureFlags';
@@ -7,7 +7,7 @@ import { useAuth } from './app/providers/useAuth';
 import { ToastProvider } from './app/providers/ToastProvider';
 import { ConfirmProvider } from './app/providers/ConfirmProvider';
 import { AppShell } from './app/AppShell';
-import { getBreadcrumbsFromPath, getPageTitleFromPath, resolveViewFromPath } from './app/routes';
+import { getPageTitleFromPath, resolveViewFromPath } from './app/routes';
 import { ErrorBoundary } from './app/ErrorBoundary';
 import { Header } from './shared/components/layout/Header';
 import { SidebarNavigation } from './shared/components/layout/SidebarNavigation';
